@@ -12,14 +12,14 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { MaterialIcons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
 
 const { width } = Dimensions.get("window");
 
 export default function Home() {
   const [joke, setJoke] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [confirmationMessage, setConfirmationMessage] = useState(false);
-  const fadeAnim = new Animated.Value(0); // Animacija za fade-in i fade-out
+  const [buttonScale] = useState(new Animated.Value(1)); // Animacija dugmadi
   const router = useRouter();
 
   const fetchJoke = async () => {
@@ -37,21 +37,20 @@ export default function Home() {
     }
   };
 
-  const showConfirmation = () => {
-    setConfirmationMessage(true);
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 500,
+  const handlePressIn = () => {
+    Animated.spring(buttonScale, {
+      toValue: 0.95,
       useNativeDriver: true,
     }).start();
+  };
 
-    setTimeout(() => {
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 500,
-        useNativeDriver: true,
-      }).start(() => setConfirmationMessage(false));
-    }, 3000);
+  const handlePressOut = () => {
+    Animated.spring(buttonScale, {
+      toValue: 1,
+      friction: 3,
+      tension: 40,
+      useNativeDriver: true,
+    }).start();
   };
 
   const saveFavorite = async () => {
@@ -65,13 +64,13 @@ export default function Home() {
       );
 
       if (isAlreadySaved) {
-        showConfirmation();
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
         return;
       }
 
       const updatedFavorites = [...storedFavorites, joke];
       await AsyncStorage.setItem("favorites", JSON.stringify(updatedFavorites));
-      showConfirmation();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       console.error("Error saving joke:", error);
     }
@@ -82,7 +81,7 @@ export default function Home() {
   }, []);
 
   return (
-    <LinearGradient colors={["#6C63FF", "#96E6FF"]} style={styles.gradient}>
+    <LinearGradient colors={["#FF7E5F", "#FEB47B"]} style={styles.gradient}>
       <View style={styles.container}>
         <Text style={styles.title}>Random Joke App</Text>
 
@@ -90,23 +89,39 @@ export default function Home() {
           <ActivityIndicator size="large" color="#ffffff" />
         ) : (
           joke && (
-            <View style={styles.card}>
+            <Animated.View
+              style={[styles.card, { transform: [{ scale: buttonScale }] }]}
+            >
               <Text style={styles.setup}>{joke.setup}</Text>
               <Text style={styles.punchline}>{joke.punchline}</Text>
-            </View>
+            </Animated.View>
           )
         )}
 
         <View style={styles.buttonContainer}>
-          <TouchableOpacity style={styles.iconButton} onPress={fetchJoke}>
-            <MaterialIcons name="refresh" size={24} color="#ffffff" />
-            <Text style={styles.iconButtonText}>New Joke</Text>
-          </TouchableOpacity>
+          <Animated.View style={{ transform: [{ scale: buttonScale }] }}>
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={fetchJoke}
+              onPressIn={handlePressIn}
+              onPressOut={handlePressOut}
+            >
+              <MaterialIcons name="refresh" size={24} color="#ffffff" />
+              <Text style={styles.iconButtonText}>New Joke</Text>
+            </TouchableOpacity>
+          </Animated.View>
 
-          <TouchableOpacity style={styles.iconButton} onPress={saveFavorite}>
-            <MaterialIcons name="favorite-border" size={24} color="#ffffff" />
-            <Text style={styles.iconButtonText}>Save</Text>
-          </TouchableOpacity>
+          <Animated.View style={{ transform: [{ scale: buttonScale }] }}>
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={saveFavorite}
+              onPressIn={handlePressIn}
+              onPressOut={handlePressOut}
+            >
+              <MaterialIcons name="favorite-border" size={24} color="#ffffff" />
+              <Text style={styles.iconButtonText}>Save</Text>
+            </TouchableOpacity>
+          </Animated.View>
         </View>
 
         <TouchableOpacity
@@ -115,14 +130,6 @@ export default function Home() {
         >
           <Text style={styles.navButtonText}>Go to Favorites</Text>
         </TouchableOpacity>
-
-        {confirmationMessage && (
-          <Animated.View
-            style={[styles.confirmationBox, { opacity: fadeAnim }]}
-          >
-            <Text style={styles.confirmationText}>Joke Saved!</Text>
-          </Animated.View>
-        )}
       </View>
     </LinearGradient>
   );
@@ -142,11 +149,14 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   title: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: "bold",
     color: "#ffffff",
     marginBottom: 20,
     textAlign: "center",
+    textShadowColor: "#000",
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 10,
   },
   card: {
     backgroundColor: "#ffffff",
@@ -154,23 +164,23 @@ const styles = StyleSheet.create({
     padding: 30,
     width: width * 0.9,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.4,
+    shadowRadius: 15,
+    elevation: 10,
     alignItems: "center",
     marginBottom: 20,
   },
   setup: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: "bold",
     color: "#333",
     marginBottom: 10,
     textAlign: "center",
   },
   punchline: {
-    fontSize: 18,
-    color: "#6C63FF",
+    fontSize: 20,
+    color: "#FF7E5F",
     textAlign: "center",
   },
   buttonContainer: {
@@ -182,16 +192,16 @@ const styles = StyleSheet.create({
   iconButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#6C63FF",
+    backgroundColor: "#FF7E5F",
     borderRadius: 25,
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 15,
     marginHorizontal: 5,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 10,
-    elevation: 5,
+    elevation: 6,
   },
   iconButtonText: {
     color: "#ffffff",
@@ -206,33 +216,16 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 25,
     borderWidth: 1,
-    borderColor: "#6C63FF",
+    borderColor: "#FF7E5F",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 10,
-    elevation: 5,
+    elevation: 6,
   },
   navButtonText: {
-    color: "#6C63FF",
+    color: "#FF7E5F",
     fontSize: 16,
     fontWeight: "bold",
-  },
-  confirmationBox: {
-    position: "absolute",
-    bottom: 50,
-    backgroundColor: "rgba(0,0,0,0.8)",
-    padding: 15,
-    borderRadius: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.5,
-    shadowRadius: 5,
-  },
-  confirmationText: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "bold",
-    textAlign: "center",
   },
 });

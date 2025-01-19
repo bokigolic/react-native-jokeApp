@@ -5,15 +5,17 @@ import {
   StyleSheet,
   TouchableOpacity,
   FlatList,
-  Alert,
+  TextInput,
   LayoutAnimation,
   UIManager,
   Platform,
+  Animated,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
 import * as Sharing from "expo-sharing";
 
 // Omogućavanje LayoutAnimation za Android
@@ -26,6 +28,9 @@ if (
 
 export default function Favorites() {
   const [favorites, setFavorites] = useState([]);
+  const [filteredFavorites, setFilteredFavorites] = useState([]);
+  const [search, setSearch] = useState("");
+  const [cardScale] = useState(new Animated.Value(1)); // Animacija skale za kartice
   const router = useRouter();
 
   const loadFavorites = async () => {
@@ -33,9 +38,25 @@ export default function Favorites() {
       const storedFavorites =
         JSON.parse(await AsyncStorage.getItem("favorites")) || [];
       setFavorites(storedFavorites);
+      setFilteredFavorites(storedFavorites);
     } catch (error) {
       console.error("Error loading favorites:", error);
     }
+  };
+
+  const animateCard = () => {
+    Animated.sequence([
+      Animated.timing(cardScale, {
+        toValue: 1.1,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(cardScale, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start();
   };
 
   const removeFavorite = async (index) => {
@@ -44,7 +65,12 @@ export default function Favorites() {
     const updatedFavorites = [...favorites];
     updatedFavorites.splice(index, 1); // Uklanjanje šale
     setFavorites(updatedFavorites);
+    setFilteredFavorites(updatedFavorites);
     await AsyncStorage.setItem("favorites", JSON.stringify(updatedFavorites));
+
+    // Haptička povratna informacija
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    animateCard(); // Pokreće animaciju kartice
   };
 
   const shareJoke = async (joke) => {
@@ -61,6 +87,17 @@ export default function Favorites() {
       dialogTitle: "Share Joke",
       text: message,
     });
+
+    // Haptička povratna informacija
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
+  const filterFavorites = (text) => {
+    setSearch(text);
+    const filtered = favorites.filter((item) =>
+      item.setup.toLowerCase().includes(text.toLowerCase())
+    );
+    setFilteredFavorites(filtered);
   };
 
   useEffect(() => {
@@ -68,20 +105,29 @@ export default function Favorites() {
   }, []);
 
   return (
-    <LinearGradient colors={["#6C63FF", "#96E6FF"]} style={styles.gradient}>
+    <LinearGradient colors={["#FF5F6D", "#FFC371"]} style={styles.gradient}>
       <View style={styles.container}>
         <Text style={styles.title}>Your Favorites</Text>
 
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search jokes..."
+          placeholderTextColor="#aaa"
+          value={search}
+          onChangeText={filterFavorites}
+        />
+
         <FlatList
-          data={favorites}
+          data={filteredFavorites}
           keyExtractor={(item, index) => index.toString()}
           renderItem={({ item, index }) => (
-            <View style={styles.card}>
+            <Animated.View
+              style={[styles.card, { transform: [{ scale: cardScale }] }]}
+            >
               <Text style={styles.setup}>{item.setup}</Text>
               <Text style={styles.punchline}>{item.punchline}</Text>
 
               <View style={styles.buttonRow}>
-                {/* Dugme za deljenje šale */}
                 <TouchableOpacity
                   style={styles.shareButton}
                   onPress={() => shareJoke(item)}
@@ -90,33 +136,25 @@ export default function Favorites() {
                   <Text style={styles.shareButtonText}>Share</Text>
                 </TouchableOpacity>
 
-                {/* Dugme za uklanjanje šale */}
                 <TouchableOpacity
                   style={styles.removeButton}
-                  onPress={() =>
-                    Alert.alert(
-                      "Remove Favorite",
-                      "Are you sure you want to remove this joke?",
-                      [
-                        { text: "Cancel", style: "cancel" },
-                        {
-                          text: "Remove",
-                          onPress: () => removeFavorite(index),
-                        },
-                      ]
-                    )
-                  }
+                  onPress={() => removeFavorite(index)}
                 >
                   <MaterialIcons name="delete" size={20} color="#ffffff" />
                   <Text style={styles.removeButtonText}>Remove</Text>
                 </TouchableOpacity>
               </View>
-            </View>
+            </Animated.View>
           )}
           ListEmptyComponent={
-            <Text style={styles.emptyText}>
-              You don't have any favorite jokes yet.
-            </Text>
+            <View style={styles.emptyContainer}>
+              <MaterialIcons
+                name="sentiment-dissatisfied"
+                size={80}
+                color="#ffffff"
+              />
+              <Text style={styles.emptyText}>No favorites found.</Text>
+            </View>
           }
         />
 
@@ -151,6 +189,21 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     marginBottom: 20,
   },
+  searchInput: {
+    backgroundColor: "#ffffff",
+    borderRadius: 25,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    width: "90%",
+    marginBottom: 20,
+    fontSize: 16,
+    color: "#333",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
   card: {
     backgroundColor: "#ffffff",
     borderRadius: 20,
@@ -158,10 +211,10 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     width: "90%",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 5,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 8,
     alignItems: "center",
   },
   setup: {
@@ -173,7 +226,7 @@ const styles = StyleSheet.create({
   },
   punchline: {
     fontSize: 18,
-    color: "#6C63FF",
+    color: "#FF5F6D",
     textAlign: "center",
   },
   buttonRow: {
@@ -210,25 +263,29 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginLeft: 5,
   },
+  emptyContainer: {
+    alignItems: "center",
+    marginTop: 50,
+  },
   emptyText: {
     fontSize: 16,
     color: "#ffffff",
     textAlign: "center",
-    marginTop: 20,
+    marginTop: 10,
   },
   backButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#6C63FF",
+    backgroundColor: "#FF5F6D",
     borderRadius: 25,
     paddingVertical: 10,
     paddingHorizontal: 15,
     marginTop: 20,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.4,
     shadowRadius: 10,
-    elevation: 5,
+    elevation: 8,
   },
   backButtonText: {
     color: "#ffffff",
